@@ -1,9 +1,6 @@
-/*! wagon.module.js — UI для вагонов: подгрузка БД, выбор картинки по типу и инверсия стороны */
-
-(function (global) {
+/*! wagon.module.js — Production UI for wagon tooltips & badges (no layout impact) */
+(function(global){
   const WagonUI = {};
-
-  // ====== Состояние по умолчанию (ОТНОСИТЕЛЬНЫЕ пути для GitHub Pages!) ======
   const _state = {
     dataUrl: './data/wagons_2000.json',
     youngYear: 2018,
@@ -12,119 +9,90 @@
       'одноэтажный': './assets/wagon_single.jpg',
       'двухэтажный': './assets/wagon_double.jpg'
     },
-    debug: false
-  };
-
-  // ====== Простое логирование ======
-  function log(...args) {
-    if (_state.debug) console.log('[WagonUI]', ...args);
+    debug: true
   }
-
-  // ====== БД в памяти ======
-  const db = {
-    byNumber: new Map() // ключ: нормализованный номер '########'
-  };
-
-  // ====== Утилиты ======
-  function normalizeWagonNumber(num) {
-    if (num == null) return '';
-    const s = String(num).replace(/[^\d]/g, '');
-    return s.length ? s : '';
-  }
-
-  function getField(obj, list) {
-    for (const k of list) {
-      if (Object.prototype.hasOwnProperty.call(obj, k)) return obj[k];
-    }
-    return undefined;
-  }
-
-  // ====== Загрузка БД ======
-  async function loadData() {
-    const url = _state.dataUrl;
-    log('Loading DB:', url);
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) throw new Error('DB fetch failed: ' + res.status + ' ' + res.statusText);
-    const arr = await res.json();
-    db.byNumber.clear();
-    for (const row of arr) {
-      const numberRaw = getField(row, ['number', 'Номер', 'Номер вагона']);
-      const num = normalizeWagonNumber(numberRaw);
-      if (!num) continue;
-      db.byNumber.set(num, row);
-    }
-    log('DB loaded. Records:', db.byNumber.size);
-  }
-
-  // ====== Поиск записи по элементу ======
-  function extractKey(el) {
-    // приоритет: data-number на самом элементе
-    const selfNum = el.getAttribute('data-number') || el.dataset.number;
-    if (selfNum) {
-      const n = normalizeWagonNumber(selfNum);
-      return n ? { type: 'number', value: n } : null;
-    }
-    // по вложенному атрибуту
-    const child = el.querySelector('[data-number]');
-    if (child) {
-      const n = normalizeWagonNumber(child.getAttribute('data-number') || child.dataset.number);
-      return n ? { type: 'number', value: n } : null;
-    }
-    // если внутри уже есть <img src="...00112233.jpg"> — извлечём номер из пути
-    const img = el.querySelector('img[src]');
-    if (img && img.src) {
-      const m = String(img.src).match(/(\d{6,})/);
-      if (m) return { type: 'number', value: m[1] };
-    }
-    return null;
-  }
-
-  function getRecByKey(key) {
-    if (!key) return null;
-    if (key.type === 'number') {
-      return db.byNumber.get(key.value) || null;
-    }
-    return null;
-  }
-
-  // ====== Разрешение картинки с учётом «инверсии» ======
-  function resolveAssetByType(typeName, el) {
+  // Resolve image by type with optional inversion flag.
+  function resolveAssetByType(typeName, el){
     if (!typeName) return null;
     const type = String(typeName).toLowerCase();
     let path = _state.typeToAsset[type] || null;
     if (!path) return null;
-
-    // определяем, нужно ли инвертировать
     let node = el, inverted = false;
-    while (node && node !== document.body) {
+    while (node && node !== document.body){
       const ds = node.dataset || {};
-      if (
-        ds.side === 'invert' ||
-        ds.flip === '1' ||
-        ds.inverted === '1' ||
-        ds.workingSide === 'right'
-      ) { inverted = true; break; }
-
-      if (node.classList && (node.classList.contains('is-inverted') || node.classList.contains('flip-h'))) {
-        inverted = true; break;
-      }
+      if (ds.side === 'invert' || ds.flip === '1' || ds.inverted === '1' || ds.workingSide === 'right') { inverted = true; break; }
+      if (node.classList && (node.classList.contains('is-inverted') || node.classList.contains('flip-h'))) { inverted = true; break; }
       node = node.parentElement;
     }
-
-    if (inverted) {
+    if (inverted){
       const dot = path.lastIndexOf('.');
-      const inv = dot > 0 ? path.slice(0, dot) + '_inverted' + path.slice(dot) : path + '_inverted';
-      return inv;
+      const invPath = dot>0 ? path.slice(0,dot) + '_inverted' + path.slice(dot) : path + '_inverted';
+      return invPath;
     }
     return path;
   }
+;
 
-  // ====== Рендер доп. информации (подсказка/бэйджи, опционально) ======
-  function buildTooltipHTML(rec) {
-    if (!rec) return '';
-    const rows = [
-      ['Тип вагона', getField(rec, ['Тип вагона', 'Тип_вагона'])],
-      ['Кол-во мест', getField(rec, ['Кол-во мест'])],
+  const db = {
+    byNumber: new Map(), // ключ: НОРМАЛИЗОВАННЫЙ номер '########'
+    byId: new Map(),
+    loaded: false
+  };
+
+  let tooltipEl = null;
+  const initialized = new WeakSet();
+
+  function log(){ if(_state.debug) console.log.apply(console, arguments); }
+
+  // === ВАЖНО: нормализация номера ===
+  // Всегда возвращаем строку ровно из 8 цифр, сохраняя ведущие нули.
+  function normalizeWagonNumber(input) {
+    const digits = String(input ?? '').replace(/\D/g, '');
+    const last8 = digits.slice(-8);        // на случай формата '###-#####' или длинных строк
+    return last8.padStart(8, '0');         // дополняем нулями слева
+  }
+
+  async function loadData(){
+    if (db.loaded) return;
+    try {
+      const resp = await fetch(_state.dataUrl, { cache: 'no-store' });
+      if (!resp.ok) throw new Error('Не удалось загрузить базу вагонов: '+_state.dataUrl);
+      const data = await resp.json();
+
+      data.forEach(r => {
+        // Индексация по ID (как есть)
+        if (r.id !== undefined && r.id !== null) {
+          db.byId.set(String(r.id), r);
+        }
+
+        // Индексация по номеру: нормализуем в '########'
+        // Поддержим возможные варианты поля в JSON: number / Номер
+        const rawNum = (r.number !== undefined ? r.number : r['Номер']);
+        if (rawNum !== undefined) {
+          const key = normalizeWagonNumber(rawNum);
+          db.byNumber.set(key, r);
+        }
+      });
+
+      db.loaded = true;
+      log('DB loaded:', db.byNumber.size, 'records');
+    } catch (error) {
+      console.error('Ошибка загрузки данных:', error);
+    }
+  }
+
+  function ensureTooltip(){
+    if (tooltipEl) return;
+    tooltipEl = document.createElement('div');
+    tooltipEl.className = 'wagon-tooltip';
+    tooltipEl.style.display = 'none';
+    document.body.appendChild(tooltipEl);
+  }
+
+  function buildHTML(rec){
+    const rows=[
+      ['Тип вагона', rec['Тип вагона']],
+      ['Кол-во мест', rec['Кол-во мест']],
       ['ЭЧТК', rec['ЭЧТК']],
       ['УКВ', rec['УКВ']],
       ['Переход р/с', rec['Переход р/с']],
@@ -134,109 +102,267 @@
       ['Постройка', rec['Постройка']],
       ['Модель вагона', rec['Модель вагона']]
     ];
-    let html = '<div class="wagon-tooltip">';
-    html += '<div class="title">Информация</div>';
-    for (const [k, v] of rows) {
-      html += `<div class="row"><div class="k">${k}</div><div class="v">${v ?? '—'}</div></div>`;
+           
+    // Пытаемся показать номер из rec.number или rec['Номер']
+    const shownNumber = normalizeWagonNumber(rec.number ?? rec['Номер'] ?? '');
+    let html = `<div class="title">Вагон №${shownNumber}</div>`;
+    for(const [k,v] of rows){ 
+      html += `<div class="row"><div class="k">${k}</div><div class="v">${v || '—'}</div></div>`; 
     }
-    html += '</div>';
     return html;
   }
 
-  // ====== Обогащение одного элемента ======
-  function enhance(el) {
-    try {
-      const key = extractKey(el);
-      const rec = getRecByKey(key);
+  function positionTooltip(evt, anchor){
+    const pad = 10;
+    let x = (evt && (evt.clientX || evt.pageX)) || 0;
+    let y = (evt && (evt.clientY || evt.pageY)) || 0;
+    if (!x && anchor) { 
+      const r = anchor.getBoundingClientRect(); 
+      x = r.right; 
+      y = r.top; 
+    }
+    const tt = tooltipEl.getBoundingClientRect();
+    let l = x + 16, t = y + 16;
+    if (l + tt.width > window.innerWidth - pad) l = x - tt.width - 16;
+    if (t + tt.height > window.innerHeight - pad) t = y - tt.height - 16;
+    tooltipEl.style.left = l + 'px';
+    tooltipEl.style.top = t + 'px';
+  }
 
-      // <img> внутри элемента
-      let img = el.querySelector('img.wagon-img');
-      if (!img) {
-        img = document.createElement('img');
-        img.className = 'wagon-img';
-        el.appendChild(img);
+  function showTooltip(rec, evt, anchor){
+    ensureTooltip();
+    tooltipEl.innerHTML = buildHTML(rec);
+    tooltipEl.style.display = 'block';
+    positionTooltip(evt, anchor);
+  }
+
+  function hideTooltip(){ 
+    if (tooltipEl) tooltipEl.style.display = 'none'; 
+  }
+
+  function getKeyFromEl(el){
+    // 1) Явные атрибуты
+    const id = el.getAttribute('data-wagon-id');
+    const num = el.getAttribute('data-number');
+    if (id) return { type: 'id', value: String(id) };
+    if (num) return { type: 'number', value: normalizeWagonNumber(num) };
+
+    // 2) Из .num (два <div>)
+    const numEl = el.querySelector('.num');
+    if (numEl) {
+      const divs = numEl.querySelectorAll('div');
+      if (divs.length >= 2) {
+        const part1 = (divs[0].textContent || '').trim();
+        const part2 = (divs[1].textContent || '').trim();
+        if (part1 && part2) {
+          const normalized = normalizeWagonNumber(part1 + part2);
+          log('Extracted number from .num divs:', normalized);
+          return { type: 'number', value: normalized };
+        }
       }
+      // Альтернатива: весь текст без пробелов
+      const fullText = (numEl.textContent || '').replace(/\s+/g, '');
+      if (fullText) {
+        const normalized = normalizeWagonNumber(fullText);
+        if (normalized) {
+          log('Extracted number from .num text:', normalized);
+          return { type: 'number', value: normalized };
+        }
+      }
+    }
 
-      // тип вагона из БД
-      let typeName = null;
+    // 3) Из текста всего элемента: форматы "001-12599" или "001 12599"
+    const txt = el.textContent || '';
+    const m = txt.match(/(\d{3})[-\s]*(\d{5})/);
+    if (m){
+      const normalized = normalizeWagonNumber(m[1] + m[2]);
+      log('Extracted number from element text:', normalized);
+      return { type: 'number', value: normalized };
+    }
+
+    // 4) Из src изображения: .../XXXXXXXX.jpg
+    const img = el.querySelector('img');
+    if (img && img.src){
+      const m2 = img.src.match(/(\d{8})(?:\.\w+)?$/);
+      if (m2) {
+        const normalized = normalizeWagonNumber(m2[1]);
+        log('Extracted number from image src:', normalized);
+        return { type: 'number', value: normalized };
+      }
+    }
+    
+    log('No number found for element:', el);
+    return null;
+  }
+
+  function getRecByKey(key){
+    if (!key) return null;
+    
+    if (key.type === 'id') {
+      const searchId = String(key.value);
+      return db.byId.get(searchId) || null;
+    }
+    
+    if (key.type === 'number') {
+      const searchValue = normalizeWagonNumber(key.value);
+      log('Searching for normalized number:', searchValue);
+      const rec = db.byNumber.get(searchValue);
       if (rec) {
-        typeName = rec['Модель вагона'] || rec['Тип вагона'] || rec['Тип_вагона'] || rec.type;
+        log('Match found:', rec);
+        return rec;
       }
+    }
+    return null;
+  }
 
-      // выбираем ресурс с учётом инверсии
-      const src = resolveAssetByType(typeName, el);
-      if (src) {
-        if (img.getAttribute('src') !== src) img.setAttribute('src', src);
-      } else {
-        // если тип не определён, визуально отметить
-        el.classList.add('wagon-missing');
-      }
+  function clearBadges(root){
+    root.querySelectorAll(':scope > .wagon-badge').forEach(n => n.remove());
+  }
 
-      // подсказка (опционально — можно убрать)
-      if (rec && !el.querySelector('.wagon-tooltip')) {
-        const wrap = document.createElement('div');
-        wrap.innerHTML = buildTooltipHTML(rec);
-        const tip = wrap.firstChild;
-        tip.style.position = 'absolute';
-        tip.style.left = '-9999px'; // скрыто, показывайте в своём UI по ховеру/клику
-        el.appendChild(tip);
-      }
-    } catch (e) {
-      log('enhance failed', e);
+  function applyBadges(root, rec){
+    clearBadges(root);
+    const isYoung = Number(rec['Постройка']) >= _state.youngYear;
+    const hasH = String(rec['Переход р/с']).toUpperCase() === 'HUBNER' || 
+                 String(rec['Переход н/с']).toUpperCase() === 'HUBNER';
+    
+    if (isYoung){
+      const s = document.createElement('div'); 
+      s.className = 'wagon-badge star'; 
+      s.textContent = '★'; 
+      root.appendChild(s);
+    }
+    if (hasH){
+      const h = document.createElement('div'); 
+      h.className = 'wagon-badge huebner'; 
+      h.textContent = 'Х'; 
+      root.appendChild(h);
     }
   }
 
-  // ====== Скан страницы ======
-  function scan() {
+  function setIconByType(root, rec){
+    const img = root.querySelector('img');
+    if (!img) return;
+    // Используем поле "Модель вагона" (при необходимости можно заменить на "Тип вагона")
+    const modelType = String(rec['Модель вагона'] || '').toLowerCase();
+    const src = _state.typeToAsset[modelType];
+    if (src) {
+      img.setAttribute('src', src);
+    }
+  }
+
+  function markMissing(root, key){
+    root.classList.add('wagon-missing');
+    root.addEventListener('mouseenter', ()=>{
+      notify('Вагон не найден в базе: ' + (key?.value || 'без номера'));
+    }, { once: true });
+  }
+
+  function notify(msg){
+    let d = document.getElementById('wagon-notify');
+    if(!d){
+      d = document.createElement('div'); 
+      d.id = 'wagon-notify';
+      Object.assign(d.style, {
+        position: 'fixed', 
+        right: '16px', 
+        bottom: '16px', 
+        maxWidth: '360px',
+        padding: '12px 14px', 
+        borderRadius: '10px', 
+        background: '#111', 
+        color: '#fff',
+        font: '14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Arial',
+        boxShadow: '0 10px 20px rgba(0,0,0,.35)', 
+        zIndex: 10000
+      });
+      document.body.appendChild(d);
+    }
+    d.innerHTML = msg + '<div style="opacity:.75;margin-top:6px">Добавьте запись в <code>' + _state.dataUrl + '</code> (обязательно «Модель вагона»).</div>';
+    d.style.display = 'block';
+    clearTimeout(d._t); 
+    d._t = setTimeout(() => { 
+      d.style.display = 'none'; 
+    }, 4500);
+  }
+
+  function enhance(root){
+    if (initialized.has(root)) return;
+    initialized.add(root);
+    
+    log('=== Enhancing element ===', root);
+    
+    root.classList.add('wagon-root');
+    const key = getKeyFromEl(root);
+    log('Extracted key:', key);
+    
+    if (key) {
+      const rec = getRecByKey(key);
+      log('Found record:', rec);
+      
+      if (!rec){
+        log('Record not found for key:', key);
+        markMissing(root, key);
+        root.addEventListener('mouseleave', hideTooltip);
+        return;
+      }
+      
+      applyBadges(root, rec);
+      setIconByType(root, rec);
+      
+      // Tooltip events
+      root.addEventListener('mouseenter', e => showTooltip(rec, e, root));
+      root.addEventListener('mousemove', e => showTooltip(rec, e, root));
+      root.addEventListener('mouseleave', hideTooltip);
+      
+      root.setAttribute('tabindex', '0');
+      root.addEventListener('focus', e => showTooltip(rec, e, root));
+      root.addEventListener('blur', hideTooltip);
+    } else {
+      log('No key extracted from element');
+      markMissing(root, null);
+    }
+  }
+
+  function scan(){
     const elements = document.querySelectorAll(_state.cellSelector);
     log('Found elements:', elements.length);
     elements.forEach(enhance);
   }
 
-  // ====== Наблюдение за изменениями DOM ======
-  function observe() {
+  function observe(){
     const mo = new MutationObserver(muts => {
-      for (const m of muts) {
-        if (m.addedNodes) {
-          m.addedNodes.forEach(n => {
-            if (!(n instanceof HTMLElement)) return;
-            if (n.matches && n.matches(_state.cellSelector)) enhance(n);
-            n.querySelectorAll && n.querySelectorAll(_state.cellSelector).forEach(enhance);
-          });
-        }
-        if (m.type === 'attributes' && m.target instanceof HTMLElement) {
-          if (m.target.matches(_state.cellSelector)) enhance(m.target);
-        }
+      for (const m of muts){
+        m.addedNodes && m.addedNodes.forEach(n => {
+          if (!(n instanceof HTMLElement)) return;
+          if (n.matches && n.matches(_state.cellSelector)) enhance(n);
+          n.querySelectorAll && n.querySelectorAll(_state.cellSelector).forEach(enhance);
+        });
       }
     });
-    mo.observe(document.documentElement, {
-      childList: true, subtree: true, attributes: true,
-      attributeFilter: ['data-number', 'data-side', 'data-flip', 'data-inverted', 'data-working-side', 'class']
-    });
+    mo.observe(document.documentElement, { childList: true, subtree: true });
   }
 
-  // ====== Публичный API ======
-  WagonUI.init = async function init(options) {
+  WagonUI.init = async async function init(options){
     Object.assign(_state, options || {});
     await loadData();
     scan();
     observe();
-    log('WagonUI initialized', _state);
+    log('WagonUI initialized with', _state);
   };
 
-  // авто-инициализация (если <script data-auto-init>)
-  function auto() {
-    const s = document.currentScript;
-    if (s && s.dataset.autoInit !== undefined) {
+  // auto-init if script tag has data-auto-init
+  function auto(){
+    const scriptEl = document.currentScript;
+    if (scriptEl && scriptEl.dataset.autoInit !== undefined){
       WagonUI.init({
-        dataUrl: s.dataset.dataUrl || _state.dataUrl,
-        youngYear: s.dataset.youngYear ? Number(s.dataset.youngYear) : _state.youngYear,
-        cellSelector: s.dataset.cellSelector || _state.cellSelector
+        dataUrl: scriptEl.dataset.dataUrl || _state.dataUrl,
+        youngYear: scriptEl.dataset.youngYear ? Number(scriptEl.dataset.youngYear) : _state.youngYear,
+        cellSelector: scriptEl.dataset.cellSelector || _state.cellSelector
       });
     }
   }
-
-  try { auto(); } catch (e) {}
+  
+  try{ auto(); }catch(e){}
 
   global.WagonUI = WagonUI;
 })(window);
