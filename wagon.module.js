@@ -345,25 +345,44 @@
     elements.forEach(enhance);
   }
 
-  function observe(){
-    const mo = new MutationObserver(muts => {
-      for (const m of muts){
-        m.addedNodes && m.addedNodes.forEach(n => {
+function observe(){
+  const mo = new MutationObserver(muts => {
+    for (const m of muts){
+      // Изменение класса / data-* → обновляем картинку и флип
+      if (m.type === 'attributes') {
+        const n = m.target;
+        if (n.matches && n.matches(_state.cellSelector)) {
+          const key = getKeyFromEl(n);
+          const rec = getRecByKey(key);
+          if (rec) setIconByType(n, rec);
+        }
+      }
+      // Новые элементы → enhance
+      if (m.addedNodes){
+        m.addedNodes.forEach(n => {
           if (!(n instanceof HTMLElement)) return;
           if (n.matches && n.matches(_state.cellSelector)) enhance(n);
           n.querySelectorAll && n.querySelectorAll(_state.cellSelector).forEach(enhance);
         });
       }
-    });
-    mo.observe(document.documentElement, { childList: true, subtree: true });
-  }
+    }
+  });
 
-  WagonUI.init = async async function init(options){
-    Object.assign(_state, options || {});
-    await loadData();
-    scan();
-    observe();
-    log('WagonUI initialized with', _state);
+  mo.observe(document.documentElement, { 
+    childList: true, 
+    subtree: true, 
+    attributes: true,
+    attributeFilter: ['class','data-side','data-flip','data-inverted','data-working-side','data-number','data-wagon-id']
+  });
+}
+
+// Исправляем объявление инициализации (убрать дублирующийся async)
+WagonUI.init = async function init(options){
+  Object.assign(_state, options || {});
+  await loadData();
+  scan();
+  observe();
+  log('WagonUI initialized with', _state);
   };
 
   // auto-init if script tag has data-auto-init
