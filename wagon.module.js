@@ -240,13 +240,29 @@
   }
 
   function setIconByType(root, rec){
-    const img = root.querySelector('img');
-    if (!img) return;
-    // Используем поле "Модель вагона" (при необходимости можно заменить на "Тип вагона")
-    const modelType = String(rec['Модель вагона'] || '').toLowerCase();
-    const src = _state.typeToAsset[modelType];
-    if (src) {
-      img.setAttribute('src', src);
+  const img = root.querySelector('img');
+  if (!img) return;
+
+  // Определяем тип (из данных)
+  const typeName = String(rec['Тип вагона'] || rec['Модель вагона'] || '').toLowerCase();
+
+  // Путь к картинке по типу
+  const src = _state.typeToAsset[typeName];
+  if (src) {
+    img.src = src;
+  }
+
+  // Проверяем, есть ли переворот
+  const isFlipped =
+    root.classList.contains('flip-h') ||
+    root.dataset.side === 'invert' ||
+    root.dataset.flip === '1' ||
+    root.dataset.inverted === '1' ||
+    root.dataset.workingSide === 'right';
+
+  // Применяем зеркалирование
+  img.style.transform = isFlipped ? 'scaleX(-1)' : 'scaleX(1)';
+  img.style.transition = 'transform 0.3s ease';
     }
   }
 
