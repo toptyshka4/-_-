@@ -238,7 +238,36 @@
       root.appendChild(h);
     }
   }
+// Определяем одно/двухэтажный вагон по строке модели.
+// Можно расширять правилами из _state.modelToTypeRules.
+function deriveTypeFromModel(modelRaw){
+  const s = String(modelRaw || '').toLowerCase();
 
+  // Позволяем переопределять правила извне
+  if (Array.isArray(_state.modelToTypeRules)) {
+    for (const rule of _state.modelToTypeRules){
+      // rule: { test: string|RegExp, type: 'одноэтажный'|'двухэтажный' }
+      if (!rule || !rule.type || !rule.test) continue;
+      const ok = (rule.test instanceof RegExp) ? rule.test.test(s) : s.includes(String(rule.test).toLowerCase());
+      if (ok) return rule.type;
+    }
+  }
+
+  // Базовая эвристика: любые упоминания "двухэтаж"
+  if (
+    s.includes('двухэтаж') ||          // «двухэтаж», «двухэтажн.»
+    s.includes('2-этаж')   ||          // «2-этаж», «2-этажный»
+    s.includes('2 этаж')   ||
+    s.includes('2этаж')    ||
+    /\b2\s*эт/i.test(s)    ||
+    /\bдвух\s*эт/i.test(s) // «двух эт.»
+  ){
+    return 'двухэтажный';
+  }
+
+  // По умолчанию считаем одноэтажным
+  return 'одноэтажный';
+}
   function setIconByType(root, rec){
   const img = root.querySelector('img');
   if (!img) return;
