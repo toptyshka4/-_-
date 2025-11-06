@@ -266,22 +266,23 @@ function deriveTypeFromModel(modelRaw){
   }
 
   // По умолчанию считаем одноэтажным
-  return 'одноэтажный';
-}
-  function setIconByType(root, rec){
+  return 'function setIconByType(root, rec){
   const img = root.querySelector('img');
   if (!img) return;
 
-  // Определяем тип (из данных)
-  const typeName = String(rec['Тип вагона'] || rec['Модель вагона'] || '').toLowerCase();
+  // Берём МОДЕЛЬ и выводим из неё этажность
+  const model = rec['Модель вагона'] || rec['Модель'] || rec['Model'];
+  const floorType = deriveTypeFromModel(model); // 'одноэтажный' | 'двухэтажный'
 
-  // Путь к картинке по типу
-  const src = _state.typeToAsset[typeName];
+  // Подбираем картинку по словарю
+  const src = _state.typeToAsset[floorType];
   if (src) {
-    img.src = src;
+    if (img.getAttribute('src') !== src) img.src = src;
+  } else if (_state.debug) {
+    console.warn('[WagonUI] Нет ассета для типа:', floorType, 'model=', model);
   }
 
-  // Проверяем, есть ли переворот
+  // Флип — только стилями, чтобы ничего не пропадало
   const isFlipped =
     root.classList.contains('flip-h') ||
     root.dataset.side === 'invert' ||
@@ -289,18 +290,11 @@ function deriveTypeFromModel(modelRaw){
     root.dataset.inverted === '1' ||
     root.dataset.workingSide === 'right';
 
-  // Применяем зеркалирование
   img.style.transform = isFlipped ? 'scaleX(-1)' : 'scaleX(1)';
   img.style.transition = 'transform 0.3s ease';
-    }
-  }
 
-  function markMissing(root, key){
-    root.classList.add('wagon-missing');
-    root.addEventListener('mouseenter', ()=>{
-      notify('Вагон не найден в базе: ' + (key?.value || 'без номера'));
-    }, { once: true });
-  }
+  if (_state.debug) console.log('[WagonUI] модель=', model, '→', floorType, '→', src, 'flip=', isFlipped);
+}
 
   function notify(msg){
     let d = document.getElementById('wagon-notify');
