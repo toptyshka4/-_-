@@ -7,3 +7,12 @@ body { font: 16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; 
 .wagon-tile { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; }
 .wagon-tile h3 { margin: 0 0 8px 0; font-size: 16px; }
 .footer { padding: 16px; text-align: center; color: #64748b; }
+.wagon-root img {
+  backface-visibility: visible;
+  transform-style: preserve-3d;
+  transition: transform 0.3s ease;
+}
+
+.flip-h img {
+  transform: scaleX(-1);
+}
