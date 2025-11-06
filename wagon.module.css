@@ -12,3 +12,12 @@
 .wagon-badge.star{background:#111;color:#fff;font-size:16px}
 .wagon-badge.huebner{background:#fff;color:#111;font-size:14px;right:30px}
 .wagon-missing{outline:2px dashed #d33;outline-offset:2px}
+.wagon-root img {
+  backface-visibility: visible;
+  transform-style: preserve-3d;
+  transition: transform 0.3s ease;
+}
+
+.flip-h img {
+  transform: scaleX(-1);
+}
