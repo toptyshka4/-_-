@@ -1,4 +1,4 @@
-// assets/js/flip-bridge.js (DOM-observing version)
+// assets/js/flip-bridge.js — model-safe: only sets data-working-side, does NOT touch img.src
 (function(){
   function normKey(n){ return String(n||'').replace(/\D/g,'').slice(-8).padStart(8,'0'); }
   function getMap(){
@@ -6,54 +6,49 @@
   }
   function applyAll(){
     const map = getMap();
+    let changed = false;
     document.querySelectorAll('[data-number]').forEach(root=>{
       const num = root.getAttribute('data-number');
       if (!num) return;
       const flipped = map[normKey(num)] === 1;
       const side = flipped ? 'right' : 'left';
-      if (root.dataset.workingSide !== side){
-        root.dataset.workingSide = side;
+      if (root.getAttribute('data-working-side') !== side){
+        root.setAttribute('data-working-side', side); // триггерит MutationObserver в wagon.module.js
+        changed = true;
       }
-      // Если проект использует подстановку файлов _inverted.* — обновим src
-      try {
-        if (typeof getWagonImgSrcBy === 'function'){
-          const img = root.querySelector('.wagon img');
-          const model = root.dataset.model || '';
-          if (img) {
-            const want = getWagonImgSrcBy(num, model);
-            if (want && img.getAttribute('src') !== want) img.src = want;
-          }
-        }
-      } catch(e){}
     });
+    // Если ничего не поменяли атрибутом (все совпало), можно мягко подсказать модулю обновиться,
+    // но без прямого вмешательства в src — просто сгенерим событие.
+    if (!changed){
+      try {
+        const evt = new Event('wagon-flip-apply', { bubbles: true });
+        document.dispatchEvent(evt);
+      } catch(e){}
+    }
   }
 
   // Первичные прогонки
   document.addEventListener('DOMContentLoaded', applyAll);
   window.addEventListener('load', applyAll);
 
-  // Редко, но полезно: при изменении localStorage с другой вкладки
+  // При изменении localStorage из другой вкладки
   window.addEventListener('storage', function(e){
     if (e.key === 'wagonFlipByNumber') applyAll();
   });
 
-  // Подхватываем отложенные/динамические изменения DOM (hydrate, добавление вагонов)
+  // Подхватываем отложенные/динамические изменения DOM (hydrate, загрузка БД, drag&drop)
   const mo = new MutationObserver((muts)=>{
     for (const m of muts){
-      if (m.type === 'childList' || (m.type === 'attributes' && m.attributeName === 'data-number')){
-        // Дешёвый троттлинг одной задачей
+      if (m.type === 'childList' || (m.type==='attributes' && (m.attributeName === 'data-number' || m.attributeName === 'data-model'))){
         if (!mo._raf){
-          mo._raf = requestAnimationFrame(()=>{
-            mo._raf = null;
-            applyAll();
-          });
+          mo._raf = requestAnimationFrame(()=>{ mo._raf = null; applyAll(); });
         }
         break;
       }
     }
   });
-  mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-number'] });
+  mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-number','data-model'] });
 
-  // Хук для явного вызова после вашей hydrate()
+  // Публичный хук (можно вызвать после вашей hydrate())
   window.__wagonFlipBridgeApply = applyAll;
 })();
