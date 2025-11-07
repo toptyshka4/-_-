@@ -13,6 +13,9 @@ body { font: 16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; 
   transition: transform 0.3s ease;
 }
 
+/* Missing record highlight */
+.missing-slot{outline:2px dashed #ef4444!important;outline-offset:2px;box-shadow:0 0 0 3px rgba(239,68,68,.12)}
+
 .flip-h img {
   transform: scaleX(-1);
 }
