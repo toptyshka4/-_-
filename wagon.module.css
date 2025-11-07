@@ -7,3 +7,7 @@
 .wagon-badge.star{background:#1e40af}
 .wagon-badge.huebner{background:#10b981}
 .wagon-root{position:relative}
+
+/* Missing record highlight */
+.missing-slot{outline:2px dashed #ef4444!important;outline-offset:2px;box-shadow:0 0 0 3px rgba(239,68,68,.12)}
+
