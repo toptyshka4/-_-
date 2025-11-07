@@ -504,6 +504,9 @@
       }
     }
     document.addEventListener('DOMContentLoaded', restoreFlippedImages);
+<script>
+  window.__wagonFlipBridgeApply && window.__wagonFlipBridgeApply();
+</script>
 
 
   (function(){
@@ -914,7 +917,7 @@
 <!-- END Wagon Hover Feature -->
  <!-- Модуль подсказок и бейджей -->
 <script src="./wagon.module.js"></script>
-<script src="./assets/js/flip-bridge.js"></script>
+<script src="./assets/js/flip-bridge.js?v=2025-11-07-2"></script>
 <script>
   WagonUI.init({
     dataUrl: './data/wagons_2000.json',           // путь к БД (обязательно относительный)
