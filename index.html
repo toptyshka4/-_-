@@ -107,7 +107,7 @@
   border-bottom: none;
 }
 </style>
-<link rel="stylesheet" href="./wagon.module.css">
+<link rel="stylesheet" href="./wagon.module.css?v=2025-11-07">
   <style>
   /* === Размеры ячеек и картинок (переопределяем переменные) === */
   :root{
@@ -504,9 +504,6 @@
       }
     }
     document.addEventListener('DOMContentLoaded', restoreFlippedImages);
-<script>
-  window.__wagonFlipBridgeApply && window.__wagonFlipBridgeApply();
-</script>
 
 
   (function(){
@@ -916,8 +913,8 @@
 
 <!-- END Wagon Hover Feature -->
  <!-- Модуль подсказок и бейджей -->
-<script src="./wagon.module.js"></script>
-<script src="./assets/js/flip-bridge.js?v=2025-11-07-2"></script>
+<script src="./wagon.module.js?v=2025-11-07"></script>
+<script src="./assets/js/flip-bridge.js?v=2025-11-07"></script>
 <script>
   WagonUI.init({
     dataUrl: './data/wagons_2000.json',           // путь к БД (обязательно относительный)
@@ -931,8 +928,13 @@
   });
 </script>
 
-<script src="./assets/js/flip.js"></script>
+<script src="./assets/js/flip.js?v=2025-11-07"></script>
 
 <script src="./assets/js/formed-trains.js"></script>
+
+<script>
+  try { window.__wagonFlipBridgeApply && window.__wagonFlipBridgeApply(); } catch(e){}
+</script>
 </body>
+
 </html>
